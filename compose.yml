@@ -64,8 +64,7 @@ services:
     restart: always
     env_file: .env.web
     ports:
-      - "80:80"
-      - "443:443"
+      - "1234:80"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - ./data/caddy-data:/data
