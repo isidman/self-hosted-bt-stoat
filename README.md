@@ -1,4 +1,4 @@
-# 🦦 Stoat Self-Hosted — Coolify Deployment Guide
+# 🦦 Stoat Self-Hosted — Coolify Deployment Guide 
 
 This guide explains how to deploy a self-hosted Stoat instance using **Coolify** on a **Hetzner VPS**, as an alternative to the standard SSH-based deployment in the [official README](https://github.com/stoatchat/self-hosted).
 
@@ -19,7 +19,6 @@ This guide explains how to deploy a self-hosted Stoat instance using **Coolify**
 - [Step 9 — Add Environment Variables](#step-9--add-environment-variables)
 - [Step 10 — Deploy](#step-10--deploy)
 - [Post-Deploy — Create Your Account](#post-deploy--create-your-account)
-- [Optional — Make Your Instance Invite-Only](#optional--make-your-instance-invite-only)
 - [Optional — Configure SMTP for Email Verification](#optional--configure-smtp-for-email-verification)
 - [Troubleshooting](#troubleshooting)
 
