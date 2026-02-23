@@ -1,97 +1,61 @@
-<div align="center">
-<h1>
-  Stoat Self-Hosted
-  
-  [![Stars](https://img.shields.io/github/stars/stoatchat/self-hosted?style=flat-square&logoColor=white)](https://github.com/stoatchat/self-hosted/stargazers)
-  [![Forks](https://img.shields.io/github/forks/stoatchat/self-hosted?style=flat-square&logoColor=white)](https://github.com/stoatchat/self-hosted/network/members)
-  [![Pull Requests](https://img.shields.io/github/issues-pr/stoatchat/self-hosted?style=flat-square&logoColor=white)](https://github.com/stoatchat/self-hosted/pulls)
-  [![Issues](https://img.shields.io/github/issues/stoatchat/self-hosted?style=flat-square&logoColor=white)](https://github.com/stoatchat/self-hosted/issues)
-  [![Contributors](https://img.shields.io/github/contributors/stoatchat/self-hosted?style=flat-square&logoColor=white)](https://github.com/stoatchat/self-hosted/graphs/contributors)
-  [![License](https://img.shields.io/github/license/stoatchat/self-hosted?style=flat-square&logoColor=white)](https://github.com/stoatchat/self-hosted/blob/main/LICENSE)
-</h1>
-Self-hosting Stoat using Docker
-</div>
-<br/>
+# 🦦 Stoat Self-Hosted — Coolify Deployment Guide
 
-This repository contains configurations and instructions that can be used for deploying a full instance of Stoat, including the back-end, web front-end, file server, and metadata and image proxy.
+This guide explains how to deploy a self-hosted Stoat instance using **Coolify** on a **Hetzner VPS**, as an alternative to the standard SSH-based deployment in the [official README](https://github.com/stoatchat/self-hosted).
 
-> [!WARNING]
-> If you are updating an instance from before February 20, 2026, please consult the [notices section](#notices) at the bottom.
+---
 
-> [!IMPORTANT]
-> A list of security advisories is [provided at the bottom](#security-advisories).
+## 📋 Table of Contents
 
-> [!NOTE]
-> Please consult _[What can I do with Stoat and how do I self-host?](https://developers.stoat.chat/faq)_ on our developer site for information about licensing and brand use.
+- [Prerequisites](#prerequisites)
+- [How This Differs from the Official Guide](#how-this-differs-from-the-official-guide)
+- [Step 1 — Set Up Your VPS](#step-1--set-up-your-vps)
+- [Step 2 — Configure DNS](#step-2--configure-dns)
+- [Step 3 — Generate Config Files via SSH](#step-3--generate-config-files-via-ssh)
+- [Step 4 — Modify compose.yml for Traefik](#step-4--modify-composeyml-for-traefik)
+- [Step 5 — Connect GitHub to Coolify](#step-5--connect-github-to-coolify)
+- [Step 6 — Create a Docker Compose Resource in Coolify](#step-6--create-a-docker-compose-resource-in-coolify)
+- [Step 7 — Set the Domain on the Caddy Service](#step-7--set-the-domain-on-the-caddy-service)
+- [Step 8 — Mount Config Files as Persistent Storage](#step-8--mount-config-files-as-persistent-storage)
+- [Step 9 — Add Environment Variables](#step-9--add-environment-variables)
+- [Step 10 — Deploy](#step-10--deploy)
+- [Post-Deploy — Create Your Account](#post-deploy--create-your-account)
+- [Optional — Make Your Instance Invite-Only](#optional--make-your-instance-invite-only)
+- [Optional — Configure SMTP for Email Verification](#optional--configure-smtp-for-email-verification)
+- [Troubleshooting](#troubleshooting)
 
-## Table of Contents
+---
 
-- [Deployment](#deployment)
-- [Updating](#updating)
-- [Additional Notes](#additional-notes)
-  - [Placing Behind Another Reverse-Proxy or Another Port](#placing-behind-another-reverse-proxy-or-another-port)
-  - [Insecurely Expose the Database](#insecurely-expose-the-database)
-  - [Mongo Compatibility](#mongo-compatibility)
-  - [KeyDB Compatibility](#keydb-compatibility)
-  - [Making Your Instance Invite-only](#making-your-instance-invite-only)
-- [Notices](#notices)
-- [Security Advisories](#security-advisories)
+## Prerequisites
 
-## Deployment
+- A **Hetzner VPS** (CX22 or higher recommended — 2 vCPU, 4GB RAM)
+- **Ubuntu 24.04** as the OS
+- **Coolify** installed on the VPS ([installation guide](https://coolify.io/docs/installation))
+- A domain or subdomain pointing to your VPS IP
+- A DNS provider (e.g. Porkbun, Cloudflare)
 
-To get started, find yourself a suitable server to deploy onto, we recommend starting with at least 2 vCPUs and 2 GB of memory.
+---
 
-> [!TIP]
->
-> **We've partnered with Hostinger to bring you a 20% discount off VPS hosting!**
->
-> 👉 https://www.hostinger.com/vps-hosting?REFERRALCODE=REVOLTCHAT
->
-> We recommend using the _KVM 2_ plan at minimum!\
-> Our testing environment for self-hosted currently sits on a KVM 2 instance, and we are happy to assist with issues.
+## How This Differs from the Official Guide
 
-The instructions going forward will use Hostinger as an example hosting platform, but you should be able to adapt these to other platforms as necessary. There are important details throughout.
+The official guide runs Stoat with **Caddy** handling both routing and SSL directly on ports 80/443. In Coolify, **Traefik** is already acting as the reverse proxy, so we need to:
 
-![Select the location](.github/guide/hostinger-1.location.webp)
+1. Move Caddy off ports 80/443 to an internal port (`1234`)
+2. Let Traefik handle SSL and route traffic to Caddy
+3. Mount config files via Coolify's persistent storage instead of the filesystem directly
 
-When asked, choose **Ubuntu Server** as your operating system; this is used by us in production, and we recommend its use.
+Think of it like this: in the official guide, Caddy is the front door. In Coolify, Traefik is the front door, and Caddy becomes an internal router sitting behind it.
 
-![Select the operating system](.github/guide/hostinger-2.os.webp)
+---
 
-If you've chosen to go with Hostinger, they include integrated malware scanning, which may be of interest:
+## Step 1 — Set Up Your VPS
 
-![Consider malware scanning](.github/guide/hostinger-3.malware.webp)
-
-You should set a secure root password for login (_or disable password login after setup, which is explained later! but you shouldn't make the password trivial until after this is secured at least!_) and we recommend that you configure an SSH key:
-
-![Configuration unfilled](.github/guide/hostinger-4.configuration.webp)
-![Configuration filled](.github/guide/hostinger-5.configuration.webp)
-
-Make sure to confirm everything is correct!
-
-![Confirmation](.github/guide/hostinger-6.complete.webp)
-
-Wait for your VPS to be created...
-
-| ![Wait for creation](.github/guide/hostinger-7.wait.webp) | ![Wait for creation](.github/guide/hostinger-8.connect.webp) |
-| --------------------------------------------------------- | ------------------------------------------------------------ |
-
-After installation, SSH into the machine:
+SSH into your VPS and run basic setup:
 
 ```bash
-# use the provided IP address to connect:
-ssh root@<ip address>
-# .. if you have a SSH key configured
-ssh root@<ip address> -i path/to/id_rsa
-```
-
-And now we can proceed with some basic configuration and securing the system:
-
-```bash
-# update the system
+# Update the system
 apt-get update && apt-get upgrade -y
 
-# configure firewall
+# Configure firewall
 ufw allow ssh
 ufw allow http
 ufw allow https
@@ -100,339 +64,308 @@ ufw allow 50000:50100/udp
 ufw default deny
 ufw enable
 
-# if you have configured an SSH key, disable password authentication:
-sudo sed -E -i 's|^#?(PasswordAuthentication)\s.*|\1 no|' /etc/ssh/sshd_config
-if ! grep '^PasswordAuthentication\s' /etc/ssh/sshd_config; then echo 'PasswordAuthentication no' |sudo tee -a /etc/ssh/sshd_config; fi
-
-# reboot to apply changes
+# Reboot to apply changes
 reboot
 ```
 
-> [!NOTE]
-> If you are using another cloud provider, or you are doing this on a physical machine, you will need to forwards ports 80, 443, 7881 and 50000-50100/udp.
-
-Your system is now ready to proceed with installation, but before we continue, you should configure your domain.
-
-![Cloudflare DNS configuration](.github/guide/cloudflare-dns.webp)
-
-Your domain (or a subdomain) should point to the server's IP (A and AAAA records) or CNAME to the hostname provided.
-
-Next, we must install the required dependencies:
+Then install Coolify:
 
 ```bash
-# ensure Git and Docker are installed
-apt-get update
-apt-get install ca-certificates curl git micro
-install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-chmod a+r /etc/apt/keyrings/docker.asc
-
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
-  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-apt-get update
-apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+curl -fsSL https://cdn.coollabs.io/coolify/install.sh | bash
 ```
 
-Now, we can pull in the configuration for Stoat:
+Access Coolify at `http://<your-vps-ip>:8000` and complete the setup wizard.
+
+---
+
+## Step 2 — Configure DNS
+
+Add the following DNS records at your DNS provider:
+
+```
+Type    Host         Answer              TTL
+A       @            <your-vps-ip>       600
+A       *            <your-vps-ip>       600
+A       <subdomain>  <your-vps-ip>       600
+```
+
+For example, if you want Stoat at `chat.yourdomain.com`:
+
+```
+A    chat    <your-vps-ip>    600
+```
+
+Verify propagation before continuing:
+
+```bash
+dig chat.yourdomain.com +short
+# Should return your VPS IP
+```
+
+---
+
+## Step 3 — Generate Config Files via SSH
+
+SSH into your VPS and generate the Stoat config:
 
 ```bash
 git clone https://github.com/stoatchat/self-hosted stoat
 cd stoat
-```
-
-Generate a configuration file by running:
-
-```bash
 chmod +x ./generate_config.sh
 ./generate_config.sh your.domain
 ```
 
-You can find [more options here](https://github.com/stoatchat/stoatchat/blob/main/crates/core/config/Revolt.toml), some noteworthy configuration options:
+This creates `Revolt.toml`, `.env.web`, `Caddyfile`, and `livekit.yml`. You'll need the contents of all of these later.
 
-- Email verification
-- Captcha
-- A custom S3 server
-- iOS & Android notifications (Requires Apple/Google developer accounts)
-
-If you'd like to edit the configuration, just run:
+Create the data directories:
 
 ```bash
-micro Revolt.toml
+mkdir -p ~/stoat/data/db
+mkdir -p ~/stoat/data/rabbit
+mkdir -p ~/stoat/data/minio
+mkdir -p ~/stoat/data/caddy-data
+mkdir -p ~/stoat/data/caddy-config
 ```
 
-Finally, we can start up Stoat. First, run it in the foreground with:
+---
 
-```bash
-docker compose up
+## Step 4 — Modify compose.yml for Traefik
+
+The `compose.yml` needs two changes to work behind Traefik.
+
+**Change 1:** Move Caddy to an internal port instead of 80/443:
+
+```yaml
+caddy:
+  ports:
+    - "1234:80"    # was "80:80" and "443:443"
 ```
 
-If it runs without any critical errors, you can stop it with <kbd>Ctrl</kbd> + <kbd>C</kbd> and run it detached (in the background) by appending `-d`.
+**Change 2:** Remove the `env_file: .env.web` lines from both the `caddy` and `web` services (these will be set as environment variables in Coolify instead):
 
-```bash
-docker compose up -d
+```yaml
+# Remove this line from caddy service:
+env_file: .env.web
+
+# Remove this line from web service:
+env_file: .env.web
 ```
+
+**Change 3:** Set `createbuckets` to not restart after it finishes:
+
+```yaml
+createbuckets:
+  restart: "no"
+```
+
+---
+
+## Step 5 — Connect GitHub to Coolify
+
+> **Note:** This step is only needed if you want to deploy from a Git repo. For the Docker Compose Empty approach (recommended), skip to Step 6.
+
+In Coolify, go to **Settings → Sources → Add GitHub App** and follow the OAuth wizard. When asked for a Webhook Endpoint, choose the `https://` URL of your Coolify instance.
+
+---
+
+## Step 6 — Create a Docker Compose Resource in Coolify
+
+1. In Coolify, go to your project → **New Resource**
+2. Search for `docker` and select **Docker Compose Empty**
+3. In the text editor that appears, paste the full contents of your modified `compose.yml`
+4. Click **Save**
+
+---
+
+## Step 7 — Set the Domain on the Caddy Service
+
+On the service stack page, find **Caddy** and click **Settings**:
+
+- **Domains:** `https://your.domain`
+- Uncheck **Strip Prefixes** (Stoat needs path prefixes like `/api`, `/ws` intact)
+- Click **Save**
+
+---
+
+## Step 8 — Mount Config Files as Persistent Storage
+
+Coolify auto-creates some storage entries from the compose volumes. You need to convert the config files from directories to actual files with content.
+
+### Caddyfile
+
+In the Caddy service → **Persistent Storages → Directories**, find the `Caddyfile` entry and click **Convert to file**. Confirm by typing the filepath shown, then paste your `Caddyfile` contents:
+
+```
+{$HOSTNAME} {
+    route /api* {
+        uri strip_prefix /api
+        reverse_proxy http://api:14702 {
+            header_down Location "^/" "/api/"
+        }
+    }
+    route /ws {
+        uri strip_prefix /ws
+        reverse_proxy http://events:14703 {
+            header_down Location "^/" "/ws/"
+        }
+    }
+    route /autumn* {
+        uri strip_prefix /autumn
+        reverse_proxy http://autumn:14704 {
+            header_down Location "^/" "/autumn/"
+        }
+    }
+    route /january* {
+        uri strip_prefix /january
+        reverse_proxy http://january:14705 {
+            header_down Location "^/" "/january/"
+        }
+    }
+    route /gifbox* {
+        uri strip_prefix /gifbox
+        reverse_proxy http://gifbox:14706 {
+            header_down Location "^/" "/gifbox/"
+        }
+    }
+    route /livekit* {
+        uri strip_prefix /livekit
+        reverse_proxy http://livekit:7880 {
+            header_down Location "^/" "/livekit/"
+        }
+    }
+    route /ingress* {
+        uri strip_prefix /ingress
+        reverse_proxy http://voice-ingress:8500 {
+            header_down Location "^/" "/ingress/"
+        }
+    }
+    reverse_proxy http://web:5000
+}
+```
+
+### Revolt.toml
+
+For each of these services: **Api, Events, Autumn, January, Gifbox, Crond, Pushd, Voice Ingress** — go to their Persistent Storage, convert the `Revolt.toml` directory entry to a file, and paste your generated `Revolt.toml` contents (from `cat ~/stoat/Revolt.toml` on your VPS).
+
+### livekit.yml
+
+For the **Livekit** service, convert its storage entry to a file and paste the contents of `~/stoat/livekit.yml`.
+
+---
+
+## Step 9 — Add Environment Variables
+
+Go to the main service stack → **Environment Variables** and add:
+
+```
+HOSTNAME=:80
+REVOLT_PUBLIC_URL=https://your.domain/api
+VITE_API_URL=https://your.domain/api
+VITE_WS_URL=wss://your.domain/ws
+VITE_MEDIA_URL=https://your.domain/autumn
+VITE_PROXY_URL=https://your.domain/january
+RABBITMQ_DEFAULT_USER=rabbituser
+RABBITMQ_DEFAULT_PASS=rabbitpass
+MINIO_ROOT_USER=minioautumn
+MINIO_ROOT_PASSWORD=minioautumn
+```
+
+Replace `your.domain` with your actual domain.
+
+---
+
+## Step 10 — Deploy
+
+Click **Deploy** and watch the logs. You should see all containers start up:
+
+```
+Container web-xxx Started
+Container rabbit-xxx Started
+Container database-xxx Started
+Container caddy-xxx Started
+Container api-xxx Started
+Container events-xxx Started
+Container autumn-xxx Started
+...
+```
+
+Visit `https://your.domain` — you should see the Stoat login page.
+
+> **Note:** The `createbuckets` container will show as "Restarting" if you didn't set `restart: "no"`. This is harmless — it's a one-time setup job — but setting it to `no` keeps things clean.
+
+---
+
+## Post-Deploy — Create Your Account
+
+### If email verification is not configured
+
+Stoat requires email verification by default, but without SMTP configured the verification email won't send. You can manually verify your account via the database.
+
+In Coolify, go to **Terminal**, select the `database` container, click **Connect**, then run:
+
+```
+mongosh
+use revolt
+db.accounts.updateOne({ email: "your@email.com" }, { $set: { verification: { status: "Verified" } } })
+```
+
+Then log in normally at `https://your.domain`.
+
+### If you want email verification to work
+
+See [Configure SMTP](#optional--configure-smtp-for-email-verification) below.
+
+---
+
+## Optional — Configure SMTP for Email Verification
+
+Add an `[email]` section to your `Revolt.toml`:
+
+```toml
+[email]
+smtp_host = "smtp.yourprovider.com"
+smtp_port = 587
+smtp_username = "your@email.com"
+smtp_password = "yourpassword"
+smtp_from = "Stoat <noreply@yourdomain.com>"
+```
+
+Recommended free SMTP providers: **Resend**, **Brevo**, **Mailgun**.
+
+---
+
+## Troubleshooting
+
+### `.env.web not found` error on deploy
+
+You left `env_file: .env.web` in the compose file. Remove those lines from the `caddy` and `web` services — the variables are set in Coolify's Environment Variables instead.
+
+### 503 on the domain
+
+- Check Traefik is running: **Coolify → Servers → Proxy**
+- Verify the Caddy service has the correct domain set in its Settings
+- Make sure **Strip Prefixes** is unchecked on the Caddy service
+
+### Containers failing to start
+
+Check that all `Revolt.toml` file mounts are set as **Files** (not Directories) in Persistent Storage. If they're directories, Caddy/API/etc. can't read them as config files.
+
+### `createbuckets` stuck in restart loop
+
+Add `restart: "no"` to the `createbuckets` service in the compose file and redeploy.
+
+### Can't log in with existing stoat.chat account
+
+Your self-hosted instance has its own separate database. You need to create a new account on your instance — it's completely independent from stoat.chat.
+
+---
 
 ## Updating
 
-Before updating, ensure you consult the notices at the top of this README, **as well as** [the notices](#notices) at the bottom, to check if there are any important changes to be aware of.
+Pull the latest compose config from the official repo, check the [Notices](https://github.com/stoatchat/self-hosted#notices) for breaking changes, then update the compose file in Coolify via **Edit Compose File** and click **Deploy**.
 
-Pull the latest version of this repository:
+---
 
-```bash
-git pull
-```
-
-Check if your configuration file is correct by opening [the reference config file](https://github.com/stoatchat/stoatchat/blob/main/crates/core/config/Revolt.toml) and your `Revolt.toml` to compare changes.
-
-Then pull all the latest images:
-
-```bash
-docker compose pull
-```
-
-Then restart the services:
-
-```bash
-docker compose up -d
-```
-
-## Additional Notes
-
-### Placing Behind Another Reverse-Proxy or Another Port
-
-If you'd like to place Stoat behind another reverse proxy or on a non-standard port, you'll need to edit `compose.yml`.
-
-Override the port definitions on `caddy`:
-
-```yml
-# compose.yml
-services:
-  caddy:
-    ports:
-      - "1234:80"
-      # - "443:443"
-```
-
-> [!WARNING]
-> This file is not included in `.gitignore`. It may be sufficient to use an override file, but that will not remove port `80` / `443` allocations.
-
-Update the hostname used by the web server:
-
-```diff
-# .env.web
-- HOSTNAME=http://example.com
-+ HOSTNAME=:80
-```
-
-You can now reverse proxy to <http://localhost:1234>.
-
-> [!NOTE]
-> If you are using nginx as your reverse proxy, you will need to add the upgrade header configuration to allow websockets on /ws and /livekit, which are required for Stoat.
-> Example:
-> ```
-> server {
->     server_name stoat.example.com;
->
->     location / {
->         allow all;
->         proxy_pass http://localhost:1234;
->         proxy_set_header Host $server_name;
->         proxy_set_header X-Real-IP $remote_addr;
->         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
->         proxy_set_header X-Forwarded-Proto $scheme;
->     }
->
->     location /ws {
->         allow all;
->         proxy_pass http://localhost:1234;
->         proxy_http_version 1.1;
->         proxy_set_header Upgrade $http_upgrade;
->         proxy_set_header Connection "upgrade";
->         proxy_set_header Host $server_name;
->         proxy_set_header X-Real-IP $remote_addr;
->         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
->         proxy_set_header X-Forwarded-Proto $scheme;
->     }
->
->     location /livekit {
->         allow all;
->         proxy_pass http://localhost:1234;
->         proxy_http_version 1.1;
->         proxy_set_header Upgrade $http_upgrade;
->         proxy_set_header Connection "upgrade";
->         proxy_set_header Host $server_name;
->         proxy_set_header X-Real-IP $remote_addr;
->         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
->         proxy_set_header X-Forwarded-Proto $scheme;
->     }
->     . . . # The rest of your nginx configuration
-> }
-> ```
-
-
-### Insecurely Expose the Database
-
-You can insecurely expose the database by adding a port definition:
-
-```yml
-# compose.override.yml
-services:
-  database:
-    ports:
-      - "27017:27017"
-```
-
-For obvious reasons, be careful doing this.
-
-### Mongo Compatibility
-
-Older processors may not support the latest MongoDB version; you may pin to MongoDB 4.4 and update the healthcheck as such:
-
-```yml
-# compose.override.yml
-services:
-  database:
-    image: mongo:4.4
-    . . .
-    healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongo localhost:27017/test --quiet
-      . . .
-```
-
-### KeyDB Compatibility
-
-Some systems may not support the latest KeyDB version; you may pin to KeyDB 6.3.3 as such:
-
-```yml
-# compose.override.yml
-services:
-  redis:
-    image: docker.io/eqalpha/keydb:v6.3.3
-```
-
-### Making Your Instance Invite-only
-
-Add the following section to your `Revolt.toml` file:
-```toml
-[api.registration]
-# Whether an invite should be required for registration
-# See https://github.com/revoltchat/self-hosted#making-your-instance-invite-only
-invite_only = true
-```
-
-Create an invite:
-
-```bash
-# drop into mongo shell
-docker compose exec database mongosh
-
-# create the invite
-use revolt
-db.invites.insertOne({ _id: "enter_an_invite_code_here" })
-```
-
-## Notices
-
-> [!IMPORTANT]
-> If you deployed Stoat before [2022-10-29](https://github.com/minio/docs/issues/624#issuecomment-1296608406), you may have to tag the `minio` image release if it's configured in "fs" mode.
->
-> ```yml
-> image: minio/minio:RELEASE.2022-10-24T18-35-07Z
-> ```
-
-> [!IMPORTANT]
-> If you deployed Stoat before [2023-04-21](https://github.com/stoatchat/stoatchat/commit/32542a822e3de0fc8cc7b29af46c54a9284ee2de), you may have to flush your Redis database.
->
-> ```bash
-> # for stock Redis and older KeyDB images:
-> docker compose exec redis redis-cli
-> # ...or for newer KeyDB images:
-> docker compose exec redis keydb-cli
->
-> # then run:
-> FLUSHDB
-> ```
-
-> [!IMPORTANT]
-> As of 30th September 2024, Autumn has undergone a major refactor, which requires a manual migration.
->
-> To begin, add a temporary container that we can work from:
->
-> ```yml
-> # compose.override.yml
-> services:
->   migration:
->     image: node:21
->     volumes:
->       - ./migrations:/cwd
->     command: "bash -c 'while true; do sleep 86400; done'"
-> ```
->
-> Then switch to the shell:
->
-> ```bash
-> docker compose up -d database migration
-> docker compose exec migration bash
-> ```
->
-> Now we can run the migration:
->
-> ```bash
-> cd /cwd
-> npm i mongodb
-> node ./20240929-autumn-rewrite.mjs
-> ```
-
-> [!IMPORTANT]
-> As of November 28, 2024, the following breaking changes have been applied:
->
-> - Rename config section `api.vapid` -> `pushd.vapid`
-> - Rename config section `api.fcm` -> `pushd.fcm`
-> - Rename config section `api.apn` -> `pushd.apn`
->
-> These will NOT automatically be applied to your config and must be changed/added manually.
->
-> The following components have been added to the compose file:
->
-> - Added `rabbit` (RabbitMQ) and `pushd` (Stoat push daemon)
-
-> [!IMPORTANT]
-> As of October 5, 2025, the following breaking changes have been applied:
->
-> - Rename docker compose project from revolt to stoat
->
-> These will NOT automatically be applied to your environment.
->
-> You must run the environment with the old revolt name to apply the update. After you run `docker compose pull` during the upgrade procedure, you must run `docker compose -p revolt down`. You may then continue with the upgrade procedure.
-
-> [!IMPORTANT]
-> As of February 18, 2026, livekit support and the new web app was added to the self host repo. In order to utilize the new voice features and the new web app, you must add a valid livekit configuration.
->
-> Before beginning the upgrade process, please do the following:
->
-> ```bash
-> git pull
-> chmod +x migrations/20260218-voice-config.sh
-> ./migrations/20260218-voice-config.sh your.domain
-> ```
->
-> This should append the new configurations to your existing configuration. Only run this migration once, as if you run it more than once your instance will fail to start. You may then continue with the upgrade procedure.
-
-> [!IMPORTANT]
-> As of February 20, 2026, there was an error in the `generate_config.sh` script. Please apply the following changes to your configuration:
->
-> In `Revolt.toml`, under the section `[api.livekit.nodes.worldwide]`, change the url value to `http://livekit:7880`
->
-> In `livekit.yml`, under the section `webhook`, change the first line under `url` to `http://voice-ingress:8500/worldwide`
->
-> Please note that these say `http` and not `https`. That is intentional.
-
-## Security Advisories
-
-- (`2024-06-21`) [GHSA-f26h-rqjq-qqjq stoatchat/stoatchat: Unrestricted account creation.](https://github.com/stoatchat/stoatchat/security/advisories/GHSA-f26h-rqjq-qqjq)
-- (`2024-12-17`) [GHSA-7f9x-pm3g-j7p4 revoltchat/january: January service can call itself recursively, causing heavy load.](https://github.com/revoltchat/january/security/advisories/GHSA-7f9x-pm3g-j7p4)
-- (`2025-02-10`) [GHSA-8684-rvfj-v3jq stoatchat/stoatchat: Webhook tokens are freely accessible for users with read permissions.](https://github.com/stoatchat/stoatchat/security/advisories/GHSA-8684-rvfj-v3jq)
-- (`2025-02-10`) [GHSA-h7h6-7pxm-mc66 stoatchat/stoatchat: Nearby message fetch requests can be crafted to fetch entire message history.](https://github.com/stoatchat/stoatchat/security/advisories/GHSA-h7h6-7pxm-mc66)
+**Last Updated:** February 2026  
+**Based on:** Stoat Self-Hosted v0.11.1  
+**Deployment Platform:** Coolify + Hetzner VPS
